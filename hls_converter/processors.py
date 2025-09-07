@@ -37,7 +37,8 @@ class VideoProcessor(BaseProcessor):
     """Processes video streams for HLS output."""
     
     def process_video_rendition(self, profile: BitrateProfile, input_file: Path, 
-                              output_dir: Path, total_duration: float) -> Dict[str, Any]:
+                              output_dir: Path, total_duration: float,
+                              progress=None, task_id=None) -> Dict[str, Any]:
         """
         Process a single video rendition.
         
@@ -88,11 +89,13 @@ class VideoProcessor(BaseProcessor):
             str(folder / "playlist.m3u8")
         ])
         
-        return self._run_ffmpeg_process(cmd, profile.name, "video", total_duration)
+        return self._run_ffmpeg_process(
+            cmd, profile.name, "video", total_duration, progress=progress, task_id=task_id
+        )
     
     def _run_ffmpeg_process(self, cmd: List[str], name: str, process_type: str, 
-                          total_duration: float) -> Dict[str, Any]:
-        """Run FFmpeg process with enhanced progress monitoring and detailed logging."""
+                          total_duration: float, *, progress=None, task_id=None) -> Dict[str, Any]:
+        """Run FFmpeg process with enhanced progress monitoring and in-place Rich updates."""
         start_time = time.time()
         process = None
         
@@ -114,8 +117,8 @@ class VideoProcessor(BaseProcessor):
             current_bitrate = "0kbits/s"
             current_q = "0.0"
             total_size = "0kB"
-            last_log_time = time.time()
-            log_interval = 10.0  # Log every 10 seconds for stable updates
+            last_update_time = time.time()
+            update_interval = 0.5  # ~2 updates/sec to avoid scroll and flicker
             
             # Extract target resolution from command for logging
             target_resolution = "Unknown"
@@ -126,90 +129,73 @@ class VideoProcessor(BaseProcessor):
                         target_resolution = scale_filter.split("scale=")[1].split(",")[0]
                         break
             
-            console.print(f"[cyan]🎬 Starting {process_type} processing for {name} (Target: {target_resolution})...[/cyan]")
+            # If we don't have a Progress renderer, emit a single start line; otherwise, keep UI minimal
+            if progress is None:
+                console.print(
+                    f"[cyan]🎬 Starting {process_type} processing for {name} (Target: {target_resolution})...[/cyan]"
+                )
             
             while True:
-                if process.stderr:
-                    output = process.stderr.readline()
-                    if output == '' and process.poll() is not None:
-                        break
-                    if output:
-                        line = output.strip()
-                        
-                        # Parse comprehensive progress information from FFmpeg
-                        if '=' in line:
-                            # Handle multiple key=value pairs in one line
-                            parts = line.split()
-                            for part in parts:
-                                if '=' in part:
-                                    key, value = part.split('=', 1)
-                                    
-                                    if key == 'speed':
-                                        current_speed = value
-                                    elif key == 'out_time':
-                                        current_time = value
-                                        try:
-                                            time_parts = current_time.split(':')
-                                            if len(time_parts) == 3:
-                                                hours, minutes, seconds = map(float, time_parts)
-                                                progress_seconds = hours * 3600 + minutes * 60 + seconds
-                                        except (ValueError, IndexError):
-                                            pass
-                                    elif key == 'frame':
-                                        try:
-                                            frames_processed = int(value)
-                                        except (ValueError, TypeError):
-                                            pass
-                                    elif key == 'fps':
-                                        try:
-                                            current_fps = float(value)
-                                        except (ValueError, TypeError):
-                                            pass
-                                    elif key == 'bitrate':
-                                        current_bitrate = value
-                                    elif key == 'q':
-                                        current_q = value
-                                    elif key == 'total_size':
-                                        total_size = value
-                        
-                        # Log detailed progress periodically with stable output
-                        current_log_time = time.time()
-                        if current_log_time - last_log_time >= log_interval:
-                            percentage = ""
-                            eta = ""
-                            
-                            if total_duration > 0 and progress_seconds > 0:
-                                pct = min(100, (progress_seconds / total_duration) * 100)
-                                percentage = f"{pct:.1f}%"
-                                
-                                if pct > 0 and pct < 100:
-                                    elapsed = current_log_time - start_time
-                                    remaining = (elapsed / (pct / 100)) - elapsed
-                                    eta_minutes = int(remaining // 60)
-                                    eta_seconds = int(remaining % 60)
-                                    eta = f"ETA: {eta_minutes:02d}:{eta_seconds:02d}"
-                            
-                            # Simple, stable status message without fluctuating elements
-                            elapsed_time = current_log_time - start_time
-                            elapsed_min, elapsed_sec = divmod(int(elapsed_time), 60)
-                            
-                            status_msg = f"[blue]{process_type.title()}[/blue] [cyan]{name}[/cyan]: [yellow]{current_time}[/yellow]"
-                            
-                            if percentage:
-                                status_msg += f" ([green]{percentage}[/green])"
-                            
-                            if current_speed and current_speed != "0x":
-                                status_msg += f" [red]{current_speed}[/red]"
-                            
-                            status_msg += f" [dim]({elapsed_min:02d}:{elapsed_sec:02d})[/dim]"
-                            
-                            if eta:
-                                status_msg += f" [yellow]{eta}[/yellow]"
-                            
-                            console.print(status_msg)
-                            last_log_time = current_log_time
-                else:
+                if not process.stderr:
                     break
+                output = process.stderr.readline()
+                if output == '' and process.poll() is not None:
+                    break
+                if not output:
+                    continue
+
+                line = output.strip()
+                # Parse comprehensive progress information from FFmpeg
+                if '=' in line:
+                    # FFmpeg -progress typically emits one key per line
+                    # Still split to be defensive if multiple appear
+                    parts = line.split()
+                    for part in parts:
+                        if '=' in part:
+                            key, value = part.split('=', 1)
+                            if key == 'speed':
+                                current_speed = value
+                            elif key == 'out_time':
+                                current_time = value
+                                try:
+                                    time_parts = current_time.split(':')
+                                    if len(time_parts) == 3:
+                                        hours, minutes, seconds = map(float, time_parts)
+                                        progress_seconds = hours * 3600 + minutes * 60 + seconds
+                                except (ValueError, IndexError):
+                                    pass
+                            elif key == 'frame':
+                                try:
+                                    frames_processed = int(value)
+                                except (ValueError, TypeError):
+                                    pass
+                            elif key == 'fps':
+                                try:
+                                    current_fps = float(value)
+                                except (ValueError, TypeError):
+                                    pass
+                            elif key == 'bitrate':
+                                current_bitrate = value
+                            elif key == 'q':
+                                current_q = value
+                            elif key == 'total_size':
+                                total_size = value
+
+                # Periodically update the Rich Progress row instead of printing lines
+                now = time.time()
+                if progress is not None and task_id is not None and (now - last_update_time) >= update_interval:
+                    # Ensure sane values
+                    display_fps = f"{current_fps:.1f}" if current_fps > 0 else "—"
+                    display_speed = current_speed if current_speed and current_speed != "0x" else "—"
+                    progress.update(
+                        task_id,
+                        completed=min(progress_seconds, total_duration) if total_duration > 0 else progress_seconds,
+                        refresh=True,
+                        speed=display_speed,
+                        fps=display_fps,
+                        time=current_time.split('.')[0] if current_time else "00:00:00",
+                    )
+                    last_update_time = now
             
             return_code = process.wait()
             duration = time.time() - start_time
@@ -223,6 +209,18 @@ class VideoProcessor(BaseProcessor):
                         speed_multiplier = float(current_speed[:-1])
                     except ValueError:
                         pass
+                # Final UI refresh to mark as completed
+                if progress is not None and task_id is not None:
+                    display_fps = f"{avg_fps:.1f}" if avg_fps > 0 else "—"
+                    display_speed = current_speed if current_speed and current_speed != "0x" else "—"
+                    progress.update(
+                        task_id,
+                        completed=total_duration if total_duration > 0 else progress_seconds,
+                        refresh=True,
+                        speed=display_speed,
+                        fps=display_fps,
+                        time=(current_time.split('.')[0] if current_time else "00:00:00"),
+                    )
                 
                 return {
                     "status": "success", 
@@ -240,6 +238,8 @@ class VideoProcessor(BaseProcessor):
                 }
             else:
                 stderr_output = process.stderr.read() if process.stderr else "Unknown error"
+                if progress is not None and task_id is not None:
+                    progress.update(task_id, refresh=True)
                 return {
                     "status": "error", 
                     "name": name, 
@@ -275,7 +275,8 @@ class AudioProcessor(BaseProcessor):
     """Processes audio streams for HLS output."""
     
     def process_audio_rendition(self, track: AudioTrack, input_file: Path, 
-                              output_dir: Path, total_duration: float) -> Dict[str, Any]:
+                              output_dir: Path, total_duration: float,
+                              progress=None, task_id=None) -> Dict[str, Any]:
         """
         Process a single audio rendition.
         
@@ -324,7 +325,9 @@ class AudioProcessor(BaseProcessor):
         
         # Reuse video processor's FFmpeg runner
         video_processor = VideoProcessor(self.encoder_detector, self.config)
-        return video_processor._run_ffmpeg_process(cmd, lang, "audio", total_duration)
+        return video_processor._run_ffmpeg_process(
+            cmd, lang, "audio", total_duration, progress=progress, task_id=task_id
+        )
 
 
 class SubtitleProcessor(BaseProcessor):

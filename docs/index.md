@@ -8,7 +8,7 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Documentation](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://hls-converter.readthedocs.io/)
+[![Documentation](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://marktennyson.github.io/hls-converter/)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 </div>
@@ -216,13 +216,13 @@ Ready to start converting videos? Choose your path:
 ## Community & Support
 
 - **📖 Documentation**: Comprehensive guides and API reference
-- **🐛 Bug Reports**: [GitHub Issues](https://github.com/your-username/hls-converter/issues)
-- **💡 Feature Requests**: [GitHub Discussions](https://github.com/your-username/hls-converter/discussions)
+- **🐛 Bug Reports**: [GitHub Issues](https://github.com/marktennyson/hls-converter/issues)
+- **💡 Feature Requests**: [GitHub Discussions](https://github.com/marktennyson/hls-converter/discussions)
 - **🤝 Contributing**: See our [Contributing Guide](contributing.md)
 
 ---
 
 <div align="center">
 <small>**Made with ❤️ for the streaming community**</small><br>
-<small>*Star this project on [GitHub](https://github.com/your-username/hls-converter) if you find it useful!*</small>
+<small>*Star this project on [GitHub](https://github.com/marktennyson/hls-converter) if you find it useful!*</small>
 </div>

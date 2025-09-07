@@ -38,7 +38,7 @@ pip install hls-converter
 For the latest development version:
 
 ```bash
-git clone https://github.com/your-username/hls-converter.git
+git clone https://github.com/marktennyson/hls-converter.git
 cd hls-converter
 pip install -e .
 ```
@@ -48,7 +48,7 @@ pip install -e .
 For contributors and developers:
 
 ```bash
-git clone https://github.com/your-username/hls-converter.git
+git clone https://github.com/marktennyson/hls-converter.git
 cd hls-converter
 pip install -e ".[dev]"
 ```

@@ -6,7 +6,6 @@ The main converter class that orchestrates the entire HLS conversion process
 using the media analyzer, encoder detector, and configuration system.
 """
 
-import os
 import time
 import multiprocessing as mp
 from pathlib import Path
@@ -14,7 +13,8 @@ from typing import List, Optional, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from rich.console import Console
-from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn
+from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, ProgressColumn
+from rich.text import Text
 from rich.panel import Panel
 from rich.table import Table
 
@@ -96,7 +96,8 @@ class HLSConverter:
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             TimeElapsedColumn(),
             TimeRemainingColumn(),
-            console=console
+            console=console,
+            transient=True
         ) as overall_progress:
             overall_task = overall_progress.add_task(
                 "[bold cyan]🎥 HLS Conversion Progress...", total=total_steps
@@ -258,87 +259,147 @@ class HLSConverter:
         
         total_tasks = len(video_tasks) + len(audio_tasks)
         completed_tasks = 0
-        
+
+        # Unified progress for renditions with extra columns for fps and speed using task fields
+        class StatsColumn(ProgressColumn):
+            def render(self, task):  # type: ignore[override]
+                speed = task.fields.get("speed", "—")
+                fps = task.fields.get("fps", "—")
+                t = task.fields.get("time", "00:00:00")
+                total_t = task.fields.get("total_time", "—")
+                return Text(f"t {t}/{total_t} • fps {fps} • {speed}")
+
         with Progress(
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             TimeElapsedColumn(),
             TimeRemainingColumn(),
-            console=console
+            StatsColumn(),
+            console=console,
+            transient=False
         ) as progress:
             main_task = progress.add_task("[cyan]Processing all renditions...", total=total_tasks)
-            
+
             # Process video renditions
             if video_tasks:
                 console.print(f"[bold blue]🎬 Processing {len(video_tasks)} video renditions...[/bold blue]")
                 with ThreadPoolExecutor(max_workers=self.optimal_workers) as executor:
-                    future_to_task = {
-                        executor.submit(self.video_processor.process_video_rendition, *task): task
-                        for task in video_tasks
-                    }
-                    
+                    # Create a per-rendition task row to update in-place
+                    task_rows = {}
+                    futures = []
+                    for profile, in_path, out_path, duration in video_tasks:
+                        # Precompute total duration string (HH:MM:SS)
+                        if duration and duration > 0:
+                            mins, secs = divmod(int(duration), 60)
+                            hrs, mins = divmod(mins, 60)
+                            total_time_str = f"{hrs:02d}:{mins:02d}:{secs:02d}"
+                        else:
+                            total_time_str = "—"
+
+                        row_id = progress.add_task(
+                            f"[cyan]Video {profile.name} ({profile.resolution[0]}x{profile.resolution[1]})",
+                            total=duration if duration and duration > 0 else 1.0,
+                            speed="—",
+                            fps="—",
+                            time="00:00:00",
+                            total_time=total_time_str,
+                        )
+                        task_rows[profile.name] = row_id
+                        futures.append(
+                            executor.submit(
+                                self.video_processor.process_video_rendition,
+                                profile, in_path, out_path, duration,
+                                progress, row_id
+                            )
+                        )
+                    future_to_task = {fut: None for fut in futures}
+
                     for future in as_completed(future_to_task):
                         result = future.result()
                         completed_tasks += 1
-                        
+
                         if result["status"] == "success":
                             # Build comprehensive completion message
                             details = [f"{result['duration']:.1f}s"]
-                            
+
                             if result.get('speed'):
                                 details.append(f"speed: {result['speed']}")
-                            
+
                             if result.get('avg_fps', 0) > 0:
                                 details.append(f"avg: {result['avg_fps']:.1f}fps")
-                            
+
                             if result.get('frames_processed', 0) > 0:
                                 details.append(f"{result['frames_processed']} frames")
-                            
+
                             if result.get('final_bitrate') and result['final_bitrate'] != "0kbits/s":
                                 details.append(f"bitrate: {result['final_bitrate']}")
-                            
+
                             if result.get('target_resolution') and result['target_resolution'] != "Unknown":
                                 details.append(f"res: {result['target_resolution']}")
-                            
+
                             details_str = f" ({', '.join(details)})" if details else ""
                             console.print(f"[green]✅ Video {result['name']} completed{details_str}[/green]")
                         else:
                             console.print(f"[red]❌ Video {result['name']} failed: {result['error']}[/red]")
-                        
+
                         progress.advance(main_task)
-            
+
             # Process audio renditions
             if audio_tasks:
                 console.print(f"[bold blue]🎵 Processing {len(audio_tasks)} audio renditions...[/bold blue]")
                 with ThreadPoolExecutor(max_workers=self.optimal_workers) as executor:
-                    future_to_task = {
-                        executor.submit(self.audio_processor.process_audio_rendition, *task): task
-                        for task in audio_tasks
-                    }
-                    
+                    task_rows = {}
+                    futures = []
+                    for track, in_path, out_path, duration in audio_tasks:
+                        label = f"[cyan]Audio {track.language}"
+                        if duration and duration > 0:
+                            mins, secs = divmod(int(duration), 60)
+                            hrs, mins = divmod(mins, 60)
+                            total_time_str = f"{hrs:02d}:{mins:02d}:{secs:02d}"
+                        else:
+                            total_time_str = "—"
+
+                        row_id = progress.add_task(
+                            label,
+                            total=duration if duration and duration > 0 else 1.0,
+                            speed="—",
+                            fps="—",
+                            time="00:00:00",
+                            total_time=total_time_str,
+                        )
+                        task_rows[track.language] = row_id
+                        futures.append(
+                            executor.submit(
+                                self.audio_processor.process_audio_rendition,
+                                track, in_path, out_path, duration,
+                                progress, row_id
+                            )
+                        )
+                    future_to_task = {fut: None for fut in futures}
+
                     for future in as_completed(future_to_task):
                         result = future.result()
                         completed_tasks += 1
-                        
+
                         if result["status"] == "success":
                             # Build comprehensive completion message for audio
                             details = [f"{result['duration']:.1f}s"]
-                            
+
                             if result.get('speed'):
                                 details.append(f"speed: {result['speed']}")
-                            
+
                             if result.get('final_bitrate') and result['final_bitrate'] != "0kbits/s":
                                 details.append(f"bitrate: {result['final_bitrate']}")
-                            
+
                             if result.get('output_size') and result['output_size'] != "0kB":
                                 details.append(f"size: {result['output_size']}")
-                            
+
                             details_str = f" ({', '.join(details)})" if details else ""
                             console.print(f"[green]✅ Audio {result['name']} completed{details_str}[/green]")
                         else:
                             console.print(f"[red]❌ Audio {result['name']} failed: {result['error']}[/red]")
-                        
+
                         progress.advance(main_task)
         
         # Process subtitles (if enabled)

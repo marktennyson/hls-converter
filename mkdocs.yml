@@ -1,10 +1,10 @@
 site_name: HLS Converter
 site_description: Professional HLS (HTTP Live Streaming) converter with automatic optimization
 site_author: HLS Converter Team
-site_url: https://hls-converter.readthedocs.io/
+site_url: https://marktennyson.github.io/hls-converter/
 
-repo_name: hls-converter
-repo_url: https://github.com/your-username/hls-converter
+repo_name: marktennyson/hls-converter
+repo_url: https://github.com/marktennyson/hls-converter
 edit_uri: edit/main/docs/
 
 theme:
@@ -67,7 +67,7 @@ markdown_extensions:
   - pymdownx.keys
   - pymdownx.magiclink:
       repo_url_shorthand: true
-      user: your-username
+      user: marktennyson
       repo: hls-converter
   - pymdownx.mark
   - pymdownx.smartsymbols
@@ -114,29 +114,12 @@ nav:
   - Getting Started:
     - Installation: installation.md
     - Quick Start: quickstart.md
-    - Basic Usage: usage.md
   - User Guide:
     - CLI Reference: cli.md
-    - Configuration: configuration.md
-    - Video Quality Settings: quality.md
-    - Hardware Acceleration: hardware.md
-    - Batch Processing: batch.md
   - API Reference:
     - Overview: api/index.md
-    - HLSConverter: api/converter.md
-    - Configuration: api/config.md
-    - Media Analysis: api/analyzer.md
-    - Encoders: api/encoders.md
-  - Advanced Topics:
-    - Custom Profiles: advanced/profiles.md
-    - Performance Tuning: advanced/performance.md
-    - Troubleshooting: advanced/troubleshooting.md
-    - Integration: advanced/integration.md
   - Development:
     - Contributing: contributing.md
-    - Development Setup: development.md
-    - Architecture: architecture.md
-    - Testing: testing.md
   - About:
     - Changelog: changelog.md
     - License: license.md

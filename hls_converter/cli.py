@@ -11,16 +11,15 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 from . import __version__
 from .converter import HLSConverter
-from .config import HLSConfig, BitrateProfile
+from .config import HLSConfig
 
 console = Console()
 
