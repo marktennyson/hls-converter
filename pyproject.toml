@@ -53,10 +53,10 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-username/hls-converter"
-Repository = "https://github.com/your-username/hls-converter.git"
-Documentation = "https://hls-converter.readthedocs.io/"
-"Bug Reports" = "https://github.com/your-username/hls-converter/issues"
+Homepage = "https://github.com/marktennyson/hls-converter"
+Repository = "https://github.com/marktennyson/hls-converter.git"
+Documentation = "https://marktennyson.github.io/hls-converter"
+"Bug Reports" = "https://github.com/marktennyson/hls-converter/issues"
 
 [project.scripts]
 hls-converter = "hls_converter.cli:main"
