@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hls-converter"
-dynamic = ["version"]
+version = "1.0.0"
 description = "Professional HLS (HTTP Live Streaming) converter with automatic optimization"
 readme = "README.md"
 license = {text = "MIT"}
@@ -62,8 +62,7 @@ Documentation = "https://marktennyson.github.io/hls-converter"
 hls-converter = "hls_converter.cli:main"
 hlsc = "hls_converter.cli:main"
 
-[tool.setuptools.dynamic]
-version = {attr = "hls_converter.__version__"}
+# note: removed dynamic setuptools_scm usage to avoid importing package during build
 
 [tool.setuptools.packages.find]
 exclude = ["tests*", "docs*"]
