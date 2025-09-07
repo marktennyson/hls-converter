@@ -6,12 +6,11 @@ Individual processors for video, audio, and subtitle streams.
 Each processor handles its specific media type with optimized settings.
 """
 
-import os
 import subprocess
 import time
 import multiprocessing as mp
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from collections import defaultdict
 
 from rich.console import Console
@@ -31,7 +30,7 @@ class BaseProcessor:
         self.encoder_detector = encoder_detector
         self.config = config
         self.cpu_count = mp.cpu_count()
-        self.optimal_workers = config.max_workers or max(2, min(self.cpu_count - 1, 8))
+        self.optimal_workers = config.max_workers or self.cpu_count
 
 
 class VideoProcessor(BaseProcessor):
@@ -79,7 +78,7 @@ class VideoProcessor(BaseProcessor):
             "-g", str(self.config.gop_size),
             "-keyint_min", str(self.config.gop_size),
             "-sc_threshold", "0",
-            "-threads", str(max(2, self.cpu_count // self.optimal_workers)),
+            "-threads", str(max(2, min(self.cpu_count, 16))),
             "-an", "-sn",  # No audio/subtitles in video renditions
             "-hls_time", str(self.config.segment_duration),
             "-hls_playlist_type", self.config.playlist_type,
@@ -116,7 +115,7 @@ class VideoProcessor(BaseProcessor):
             current_q = "0.0"
             total_size = "0kB"
             last_log_time = time.time()
-            log_interval = 3.0  # Log every 3 seconds for more frequent updates
+            log_interval = 10.0  # Log every 10 seconds for stable updates
             
             # Extract target resolution from command for logging
             target_resolution = "Unknown"
@@ -173,7 +172,7 @@ class VideoProcessor(BaseProcessor):
                                     elif key == 'total_size':
                                         total_size = value
                         
-                        # Log detailed progress periodically
+                        # Log detailed progress periodically with stable output
                         current_log_time = time.time()
                         if current_log_time - last_log_time >= log_interval:
                             percentage = ""
@@ -186,50 +185,28 @@ class VideoProcessor(BaseProcessor):
                                 if pct > 0 and pct < 100:
                                     elapsed = current_log_time - start_time
                                     remaining = (elapsed / (pct / 100)) - elapsed
-                                    eta_hours = int(remaining // 3600)
-                                    eta_minutes = int((remaining % 3600) // 60)
+                                    eta_minutes = int(remaining // 60)
                                     eta_seconds = int(remaining % 60)
-                                    
-                                    if eta_hours > 0:
-                                        eta = f"ETA: {eta_hours:02d}:{eta_minutes:02d}:{eta_seconds:02d}"
-                                    else:
-                                        eta = f"ETA: {eta_minutes:02d}:{eta_seconds:02d}"
+                                    eta = f"ETA: {eta_minutes:02d}:{eta_seconds:02d}"
                             
-                            # Enhanced logging with all available metrics
+                            # Simple, stable status message without fluctuating elements
                             elapsed_time = current_log_time - start_time
                             elapsed_min, elapsed_sec = divmod(int(elapsed_time), 60)
-                            elapsed_str = f"{elapsed_min:02d}:{elapsed_sec:02d}"
                             
-                            # Build comprehensive status message
-                            status_parts = [
-                                f"[bold blue]{process_type.title()}[/bold blue] [cyan]{name}[/cyan]:",
-                                f"[yellow]{current_time}[/yellow]"
-                            ]
+                            status_msg = f"[blue]{process_type.title()}[/blue] [cyan]{name}[/cyan]: [yellow]{current_time}[/yellow]"
                             
                             if percentage:
-                                status_parts.append(f"([green]{percentage}[/green])")
+                                status_msg += f" ([green]{percentage}[/green])"
                             
-                            if current_fps > 0:
-                                status_parts.append(f"[magenta]{current_fps:.1f}fps[/magenta]")
+                            if current_speed and current_speed != "0x":
+                                status_msg += f" [red]{current_speed}[/red]"
                             
-                            if current_bitrate != "0kbits/s":
-                                status_parts.append(f"[blue]{current_bitrate}[/blue]")
-                            
-                            if current_speed != "0x":
-                                status_parts.append(f"[red]{current_speed}[/red]")
-                            
-                            if frames_processed > 0:
-                                status_parts.append(f"[dim]{frames_processed} frames[/dim]")
-                            
-                            if total_size != "0kB":
-                                status_parts.append(f"[dim]{total_size}[/dim]")
-                            
-                            status_parts.append(f"[dim]({elapsed_str})[/dim]")
+                            status_msg += f" [dim]({elapsed_min:02d}:{elapsed_sec:02d})[/dim]"
                             
                             if eta:
-                                status_parts.append(f"[yellow]{eta}[/yellow]")
+                                status_msg += f" [yellow]{eta}[/yellow]"
                             
-                            console.print(" ".join(status_parts))
+                            console.print(status_msg)
                             last_log_time = current_log_time
                 else:
                     break
@@ -335,7 +312,7 @@ class AudioProcessor(BaseProcessor):
             "-c:a", audio_encoder,
             "-b:a", audio_bitrate,
             "-ar", "48000",  # Standard sample rate for HLS
-            "-threads", str(max(2, self.cpu_count // self.optimal_workers)),
+            "-threads", str(max(2, min(self.cpu_count, 16))),
             "-vn", "-sn",  # No video/subtitles
             "-hls_time", str(self.config.segment_duration),
             "-hls_playlist_type", self.config.playlist_type,

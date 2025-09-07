@@ -56,7 +56,7 @@ class HLSConverter:
         
         # Performance settings
         self.cpu_count = mp.cpu_count()
-        self.optimal_workers = self.config.max_workers or max(2, min(self.cpu_count - 1, 8))
+        self.optimal_workers = self.config.max_workers or self.cpu_count
         
     def convert(self, input_file: str | Path, output_dir: str | Path, 
                 resolutions: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -120,8 +120,9 @@ class HLSConverter:
             step_start = time.time()
             console.print("[bold blue]Step 3/5: Configuring adaptive bitrate profiles[/bold blue]")
             
-            # Determine resolutions
+            # Determine resolutions - prioritize user input
             if resolutions is None:
+                # Only auto-determine if user didn't specify
                 resolutions = self.media_analyzer.get_optimal_resolutions(media_info.video) if media_info.video is not None else []
             
             # Create adaptive bitrate profiles
@@ -131,11 +132,39 @@ class HLSConverter:
                     media_info.video.height,
                     media_info.video.bitrate
                 )
-                # Filter profiles based on requested resolutions
-                self.config.bitrate_profiles = [
-                    profile for profile in adaptive_profiles
-                    if profile.resolution_name in resolutions
-                ]
+                
+                if resolutions:
+                    # User specified resolutions - enforce them regardless of input
+                    self.config.bitrate_profiles = [
+                        profile for profile in adaptive_profiles
+                        if profile.resolution_name in resolutions
+                    ]
+                    
+                    # If user requested resolutions not in adaptive profiles, create them
+                    missing_resolutions = set(resolutions) - {p.resolution_name for p in self.config.bitrate_profiles}
+                    for res in missing_resolutions:
+                        if res in ["2160p", "1440p", "1080p", "720p", "480p", "360p"]:
+                            # Create profile for missing resolution
+                            res_map = {
+                                "2160p": (3840, 2160, 15000, 8000),
+                                "1440p": (2560, 1440, 10000, 6000), 
+                                "1080p": (1920, 1080, 5000, 3000),
+                                "720p": (1280, 720, 3000, 1500),
+                                "480p": (854, 480, 1500, 800),
+                                "360p": (640, 360, 800, 400)
+                            }
+                            if res in res_map:
+                                width, height, max_br, min_br = res_map[res]
+                                profile = BitrateProfile(
+                                    name=res.replace("p", ""),
+                                    resolution=(width, height),
+                                    max_bitrate_kbps=max_br,
+                                    min_bitrate_kbps=min_br
+                                )
+                                self.config.bitrate_profiles.append(profile)
+                else:
+                    # No resolutions specified, use all adaptive profiles
+                    self.config.bitrate_profiles = adaptive_profiles
             
             self._show_processing_config(media_info, encoder_info, resolutions)
             step_timings["Configuration"] = time.time() - step_start
@@ -254,8 +283,26 @@ class HLSConverter:
                         completed_tasks += 1
                         
                         if result["status"] == "success":
-                            speed_info = f" (speed: {result.get('speed', 'N/A')})" if result.get('speed') else ""
-                            console.print(f"[green]✅ Video {result['name']} completed in {result['duration']:.1f}s{speed_info}[/green]")
+                            # Build comprehensive completion message
+                            details = [f"{result['duration']:.1f}s"]
+                            
+                            if result.get('speed'):
+                                details.append(f"speed: {result['speed']}")
+                            
+                            if result.get('avg_fps', 0) > 0:
+                                details.append(f"avg: {result['avg_fps']:.1f}fps")
+                            
+                            if result.get('frames_processed', 0) > 0:
+                                details.append(f"{result['frames_processed']} frames")
+                            
+                            if result.get('final_bitrate') and result['final_bitrate'] != "0kbits/s":
+                                details.append(f"bitrate: {result['final_bitrate']}")
+                            
+                            if result.get('target_resolution') and result['target_resolution'] != "Unknown":
+                                details.append(f"res: {result['target_resolution']}")
+                            
+                            details_str = f" ({', '.join(details)})" if details else ""
+                            console.print(f"[green]✅ Video {result['name']} completed{details_str}[/green]")
                         else:
                             console.print(f"[red]❌ Video {result['name']} failed: {result['error']}[/red]")
                         
@@ -275,8 +322,20 @@ class HLSConverter:
                         completed_tasks += 1
                         
                         if result["status"] == "success":
-                            speed_info = f" (speed: {result.get('speed', 'N/A')})" if result.get('speed') else ""
-                            console.print(f"[green]✅ Audio {result['name']} completed in {result['duration']:.1f}s{speed_info}[/green]")
+                            # Build comprehensive completion message for audio
+                            details = [f"{result['duration']:.1f}s"]
+                            
+                            if result.get('speed'):
+                                details.append(f"speed: {result['speed']}")
+                            
+                            if result.get('final_bitrate') and result['final_bitrate'] != "0kbits/s":
+                                details.append(f"bitrate: {result['final_bitrate']}")
+                            
+                            if result.get('output_size') and result['output_size'] != "0kB":
+                                details.append(f"size: {result['output_size']}")
+                            
+                            details_str = f" ({', '.join(details)})" if details else ""
+                            console.print(f"[green]✅ Audio {result['name']} completed{details_str}[/green]")
                         else:
                             console.print(f"[red]❌ Audio {result['name']} failed: {result['error']}[/red]")
                         
