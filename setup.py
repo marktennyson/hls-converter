@@ -10,9 +10,16 @@ this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text(encoding='utf-8') if (this_directory / "README.md").exists() else ""
 
 # Read version from __init__.py
-version = {}
-with open("hls_converter/__init__.py") as fp:
-    exec(fp.read(), version)
+import re
+
+# Safely read the package version without executing package code
+version_file = (this_directory / "hls_converter" / "__init__.py")
+version = {"__version__": "0.0.0"}
+if version_file.exists():
+    content = version_file.read_text(encoding='utf-8')
+    match = re.search(r"^__version__\s*=\s*['\"]([^'\"]+)['\"]", content, re.M)
+    if match:
+        version['__version__'] = match.group(1)
 
 # Read requirements
 requirements = []
