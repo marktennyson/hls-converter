@@ -1,0 +1,138 @@
+/* Custom styles for HLS Converter documentation */
+
+:root {
+  --md-primary-fg-color: #6366f1;
+  --md-primary-fg-color--light: #818cf8;
+  --md-primary-fg-color--dark: #4f46e5;
+  --md-accent-fg-color: #8b5cf6;
+}
+
+/* Custom admonition styles */
+.md-typeset .admonition.tip {
+  border-color: #10b981;
+}
+
+.md-typeset .admonition.tip > .admonition-title {
+  background-color: rgba(16, 185, 129, 0.1);
+  border-color: #10b981;
+}
+
+/* Code block improvements */
+.md-typeset .highlight .gp {
+  color: #6366f1;
+  font-weight: bold;
+}
+
+/* Custom grid cards */
+.grid.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.grid.cards > * {
+  background: var(--md-code-bg-color);
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 0.2rem;
+  padding: 1rem;
+  transition: all 0.2s;
+}
+
+.grid.cards > *:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* Tables styling */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 0.2rem;
+}
+
+.md-typeset table:not([class]) th {
+  background-color: var(--md-code-bg-color);
+  font-weight: 600;
+}
+
+/* Custom badges */
+.badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+}
+
+.badges img {
+  height: 20px;
+}
+
+/* Command examples styling */
+.md-typeset .highlight .language-bash .gp::before {
+  content: "$ ";
+  color: var(--md-primary-fg-color);
+}
+
+/* Responsive video */
+.video-container {
+  position: relative;
+  width: 100%;
+  height: 0;
+  padding-bottom: 56.25%; /* 16:9 aspect ratio */
+}
+
+.video-container iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Feature highlights */
+.feature-highlight {
+  background: linear-gradient(135deg, var(--md-primary-fg-color--light) 0%, var(--md-accent-fg-color) 100%);
+  color: white;
+  padding: 2rem;
+  border-radius: 0.5rem;
+  margin: 2rem 0;
+}
+
+.feature-highlight h3 {
+  color: white;
+  margin-top: 0;
+}
+
+/* API documentation improvements */
+.md-typeset .doc-heading {
+  border-bottom: 2px solid var(--md-primary-fg-color);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+/* Performance comparison table */
+.performance-table {
+  width: 100%;
+  margin: 2rem 0;
+}
+
+.performance-table th,
+.performance-table td {
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.performance-good {
+  color: #10b981;
+  font-weight: bold;
+}
+
+.performance-medium {
+  color: #f59e0b;
+  font-weight: bold;
+}
+
+.performance-poor {
+  color: #ef4444;
+  font-weight: bold;
+}
