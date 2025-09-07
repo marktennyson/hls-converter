@@ -1,0 +1,142 @@
+site_name: HLS Converter
+site_description: Professional HLS (HTTP Live Streaming) converter with automatic optimization
+site_author: HLS Converter Team
+site_url: https://hls-converter.readthedocs.io/
+
+repo_name: hls-converter
+repo_url: https://github.com/your-username/hls-converter
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - content.action.edit
+    - content.action.view
+    - content.code.copy
+    - content.code.annotate
+
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+    view: material/eye
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: your-username
+      repo: hls-converter
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - autorefs
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            members_order: source
+            separate_signature: true
+            filters: ["!^_"]
+            merge_init_into_class: true
+            show_signature_annotations: true
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/your-username/hls-converter
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/hls-converter/
+  version:
+    provider: mike
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: installation.md
+    - Quick Start: quickstart.md
+    - Basic Usage: usage.md
+  - User Guide:
+    - CLI Reference: cli.md
+    - Configuration: configuration.md
+    - Video Quality Settings: quality.md
+    - Hardware Acceleration: hardware.md
+    - Batch Processing: batch.md
+  - API Reference:
+    - Overview: api/index.md
+    - HLSConverter: api/converter.md
+    - Configuration: api/config.md
+    - Media Analysis: api/analyzer.md
+    - Encoders: api/encoders.md
+  - Advanced Topics:
+    - Custom Profiles: advanced/profiles.md
+    - Performance Tuning: advanced/performance.md
+    - Troubleshooting: advanced/troubleshooting.md
+    - Integration: advanced/integration.md
+  - Development:
+    - Contributing: contributing.md
+    - Development Setup: development.md
+    - Architecture: architecture.md
+    - Testing: testing.md
+  - About:
+    - Changelog: changelog.md
+    - License: license.md

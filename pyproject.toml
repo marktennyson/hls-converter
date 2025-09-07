@@ -1,0 +1,98 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hls-converter"
+dynamic = ["version"]
+description = "Professional HLS (HTTP Live Streaming) converter with automatic optimization"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "HLS Converter Team"},
+]
+keywords = [
+    "hls", "http-live-streaming", "video", "streaming", "ffmpeg", 
+    "transcoding", "adaptive-bitrate", "m3u8", "video-processing"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers", 
+    "Intended Audience :: System Administrators",
+    "Topic :: Multimedia :: Video :: Conversion",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9", 
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0", 
+    "black>=23.0.0",
+    "isort>=5.0.0",
+    "flake8>=5.0.0",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
+]
+docs = [
+    "sphinx>=5.0.0",
+    "sphinx-rtd-theme>=1.0.0",
+    "myst-parser>=0.18.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-username/hls-converter"
+Repository = "https://github.com/your-username/hls-converter.git"
+Documentation = "https://hls-converter.readthedocs.io/"
+"Bug Reports" = "https://github.com/your-username/hls-converter/issues"
+
+[project.scripts]
+hls-converter = "hls_converter.cli:main"
+hlsc = "hls_converter.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "hls_converter.__version__"}
+
+[tool.setuptools.packages.find]
+exclude = ["tests*", "docs*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config", 
+    "--cov=hls_converter",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+]
