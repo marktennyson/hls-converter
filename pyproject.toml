@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hls-converter"
 version = "1.0.0"
-description = "Professional HLS (HTTP Live Streaming) converter with automatic optimization"
+description = "One-command HLS converter — hardware-accelerated, auto-optimized, multi-bitrate adaptive streams."
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
