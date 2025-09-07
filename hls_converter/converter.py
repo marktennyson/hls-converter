@@ -122,7 +122,7 @@ class HLSConverter:
             
             # Determine resolutions
             if resolutions is None:
-                resolutions = self.media_analyzer.get_optimal_resolutions(media_info.video)
+                resolutions = self.media_analyzer.get_optimal_resolutions(media_info.video) if media_info.video is not None else []
             
             # Create adaptive bitrate profiles
             if media_info.video:

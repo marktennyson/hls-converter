@@ -93,7 +93,7 @@ class VideoProcessor(BaseProcessor):
     
     def _run_ffmpeg_process(self, cmd: List[str], name: str, process_type: str, 
                           total_duration: float) -> Dict[str, Any]:
-        """Run FFmpeg process with progress monitoring."""
+        """Run FFmpeg process with enhanced progress monitoring and detailed logging."""
         start_time = time.time()
         process = None
         
@@ -106,14 +106,28 @@ class VideoProcessor(BaseProcessor):
                 universal_newlines=True
             )
             
-            # Monitor progress
+            # Enhanced progress tracking variables
             current_speed = "0x"
             current_time = "00:00:00"
             progress_seconds = 0.0
             frames_processed = 0
+            current_fps = 0.0
+            current_bitrate = "0kbits/s"
+            current_q = "0.0"
+            total_size = "0kB"
             last_log_time = time.time()
+            log_interval = 3.0  # Log every 3 seconds for more frequent updates
             
-            console.print(f"[cyan]🎬 Starting {process_type} processing for {name}...[/cyan]")
+            # Extract target resolution from command for logging
+            target_resolution = "Unknown"
+            for i, arg in enumerate(cmd):
+                if arg == "-vf" and i + 1 < len(cmd):
+                    scale_filter = cmd[i + 1]
+                    if "scale=" in scale_filter:
+                        target_resolution = scale_filter.split("scale=")[1].split(",")[0]
+                        break
+            
+            console.print(f"[cyan]🎬 Starting {process_type} processing for {name} (Target: {target_resolution})...[/cyan]")
             
             while True:
                 if process.stderr:
@@ -123,47 +137,100 @@ class VideoProcessor(BaseProcessor):
                     if output:
                         line = output.strip()
                         
-                        # Parse progress information
-                        if line.startswith('speed='):
-                            current_speed = line.split('=')[1].strip()
-                        elif line.startswith('out_time='):
-                            current_time = line.split('=')[1].strip()
-                            try:
-                                time_parts = current_time.split(':')
-                                if len(time_parts) == 3:
-                                    hours, minutes, seconds = map(float, time_parts)
-                                    progress_seconds = hours * 3600 + minutes * 60 + seconds
-                            except (ValueError, IndexError):
-                                pass
-                        elif line.startswith('frame='):
-                            try:
-                                value = line.split('=', 1)[1].split()[0]
-                                frames_processed = int(value)
-                            except (ValueError, IndexError):
-                                pass
+                        # Parse comprehensive progress information from FFmpeg
+                        if '=' in line:
+                            # Handle multiple key=value pairs in one line
+                            parts = line.split()
+                            for part in parts:
+                                if '=' in part:
+                                    key, value = part.split('=', 1)
+                                    
+                                    if key == 'speed':
+                                        current_speed = value
+                                    elif key == 'out_time':
+                                        current_time = value
+                                        try:
+                                            time_parts = current_time.split(':')
+                                            if len(time_parts) == 3:
+                                                hours, minutes, seconds = map(float, time_parts)
+                                                progress_seconds = hours * 3600 + minutes * 60 + seconds
+                                        except (ValueError, IndexError):
+                                            pass
+                                    elif key == 'frame':
+                                        try:
+                                            frames_processed = int(value)
+                                        except (ValueError, TypeError):
+                                            pass
+                                    elif key == 'fps':
+                                        try:
+                                            current_fps = float(value)
+                                        except (ValueError, TypeError):
+                                            pass
+                                    elif key == 'bitrate':
+                                        current_bitrate = value
+                                    elif key == 'q':
+                                        current_q = value
+                                    elif key == 'total_size':
+                                        total_size = value
                         
-                        # Log progress periodically
+                        # Log detailed progress periodically
                         current_log_time = time.time()
-                        if current_log_time - last_log_time >= 5.0:
+                        if current_log_time - last_log_time >= log_interval:
                             percentage = ""
                             eta = ""
                             
                             if total_duration > 0 and progress_seconds > 0:
                                 pct = min(100, (progress_seconds / total_duration) * 100)
-                                percentage = f" ({pct:.1f}%)"
+                                percentage = f"{pct:.1f}%"
                                 
                                 if pct > 0 and pct < 100:
                                     elapsed = current_log_time - start_time
                                     remaining = (elapsed / (pct / 100)) - elapsed
-                                    eta_min, eta_sec = divmod(int(remaining), 60)
-                                    eta = f" ETA: {eta_min:02d}:{eta_sec:02d}"
+                                    eta_hours = int(remaining // 3600)
+                                    eta_minutes = int((remaining % 3600) // 60)
+                                    eta_seconds = int(remaining % 60)
+                                    
+                                    if eta_hours > 0:
+                                        eta = f"ETA: {eta_hours:02d}:{eta_minutes:02d}:{eta_seconds:02d}"
+                                    else:
+                                        eta = f"ETA: {eta_minutes:02d}:{eta_seconds:02d}"
                             
-                            if current_speed and current_time:
-                                console.print(
-                                    f"[dim]{process_type.title()} {name}: {current_time}{percentage} "
-                                    f"at {current_speed} | {frames_processed} frames{eta}[/dim]"
-                                )
-                                last_log_time = current_log_time
+                            # Enhanced logging with all available metrics
+                            elapsed_time = current_log_time - start_time
+                            elapsed_min, elapsed_sec = divmod(int(elapsed_time), 60)
+                            elapsed_str = f"{elapsed_min:02d}:{elapsed_sec:02d}"
+                            
+                            # Build comprehensive status message
+                            status_parts = [
+                                f"[bold blue]{process_type.title()}[/bold blue] [cyan]{name}[/cyan]:",
+                                f"[yellow]{current_time}[/yellow]"
+                            ]
+                            
+                            if percentage:
+                                status_parts.append(f"([green]{percentage}[/green])")
+                            
+                            if current_fps > 0:
+                                status_parts.append(f"[magenta]{current_fps:.1f}fps[/magenta]")
+                            
+                            if current_bitrate != "0kbits/s":
+                                status_parts.append(f"[blue]{current_bitrate}[/blue]")
+                            
+                            if current_speed != "0x":
+                                status_parts.append(f"[red]{current_speed}[/red]")
+                            
+                            if frames_processed > 0:
+                                status_parts.append(f"[dim]{frames_processed} frames[/dim]")
+                            
+                            if total_size != "0kB":
+                                status_parts.append(f"[dim]{total_size}[/dim]")
+                            
+                            status_parts.append(f"[dim]({elapsed_str})[/dim]")
+                            
+                            if eta:
+                                status_parts.append(f"[yellow]{eta}[/yellow]")
+                            
+                            console.print(" ".join(status_parts))
+                            last_log_time = current_log_time
                 else:
                     break
             
@@ -171,12 +238,28 @@ class VideoProcessor(BaseProcessor):
             duration = time.time() - start_time
             
             if return_code == 0:
+                # Calculate average processing stats
+                avg_fps = frames_processed / duration if duration > 0 else 0
+                speed_multiplier = 0
+                if current_speed and current_speed.endswith('x'):
+                    try:
+                        speed_multiplier = float(current_speed[:-1])
+                    except ValueError:
+                        pass
+                
                 return {
                     "status": "success", 
                     "name": name, 
                     "duration": duration, 
                     "type": process_type, 
-                    "speed": current_speed
+                    "speed": current_speed,
+                    "frames_processed": frames_processed,
+                    "avg_fps": avg_fps,
+                    "final_bitrate": current_bitrate,
+                    "output_size": total_size,
+                    "target_resolution": target_resolution,
+                    "speed_multiplier": speed_multiplier,
+                    "quality": current_q
                 }
             else:
                 stderr_output = process.stderr.read() if process.stderr else "Unknown error"
@@ -185,7 +268,8 @@ class VideoProcessor(BaseProcessor):
                     "name": name, 
                     "duration": duration, 
                     "error": stderr_output, 
-                    "type": process_type
+                    "type": process_type,
+                    "target_resolution": target_resolution
                 }
         
         except Exception as e:
