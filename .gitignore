@@ -71,6 +71,7 @@ docs/_build/
 
 # HLS output directories
 hls_*/
+!hls_converter/
 streaming_*/
 output/
 *_output/
