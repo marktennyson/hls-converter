@@ -94,6 +94,24 @@ class HLSConverterCLI:
             type=int,
             help='Number of parallel workers (default: auto-detect optimal)'
         )
+
+        parser.add_argument(
+            '--encoder-threads',
+            type=int,
+            help='Threads per encoder process to use for FFmpeg (-threads). If not set, auto-calculated.'
+        )
+
+        parser.add_argument(
+            '--force-software',
+            action='store_true',
+            help='Force software encoders (e.g., libx264/aac) and disable hardware acceleration.'
+        )
+
+        parser.add_argument(
+            '--disable-hwaccel',
+            action='store_true',
+            help='Disable FFmpeg hardware acceleration for decoding (CPU-only decode).'
+        )
         
         parser.add_argument(
             '--segment-duration',
@@ -281,6 +299,13 @@ class HLSConverterCLI:
             config.crf = args.crf
         if args.workers:
             config.max_workers = args.workers
+        if args.encoder_threads:
+            config.encoder_threads = args.encoder_threads
+        if args.force_software:
+            config.force_software_encoding = True
+            config.disable_hwaccel = True
+        if args.disable_hwaccel:
+            config.disable_hwaccel = True
         if args.segment_duration:
             config.segment_duration = args.segment_duration
         if args.gop_size:

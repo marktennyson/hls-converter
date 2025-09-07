@@ -41,6 +41,12 @@ class HLSConfig:
     
     # Processing settings
     max_workers: Optional[int] = None
+    # Force CPU (software) encoding and disable hardware acceleration
+    force_software_encoding: bool = False
+    # When True, do not pass any hwaccel flags to FFmpeg (CPU decode)
+    disable_hwaccel: bool = False
+    # Threads passed to encoder (FFmpeg -threads). If None, defaults to CPU count
+    encoder_threads: Optional[int] = None
     
     # Quality settings
     preset: str = "fast"
@@ -146,6 +152,9 @@ class HLSConfig:
             "playlist_type": self.playlist_type,
             "gop_size": self.gop_size,
             "max_workers": self.max_workers,
+            "force_software_encoding": self.force_software_encoding,
+            "disable_hwaccel": self.disable_hwaccel,
+            "encoder_threads": self.encoder_threads,
             "preset": self.preset,
             "crf": self.crf,
             "convert_subtitles": self.convert_subtitles,
@@ -175,18 +184,21 @@ class HLSConfig:
             )
             for p in config_dict.get("bitrate_profiles", [])
         ]
-        
+
         config = cls()
         config.segment_duration = config_dict.get("segment_duration", config.segment_duration)
         config.playlist_type = config_dict.get("playlist_type", config.playlist_type)
         config.gop_size = config_dict.get("gop_size", config.gop_size)
         config.max_workers = config_dict.get("max_workers", config.max_workers)
+        config.force_software_encoding = config_dict.get("force_software_encoding", config.force_software_encoding)
+        config.disable_hwaccel = config_dict.get("disable_hwaccel", config.disable_hwaccel)
+        config.encoder_threads = config_dict.get("encoder_threads", config.encoder_threads)
         config.preset = config_dict.get("preset", config.preset)
         config.crf = config_dict.get("crf", config.crf)
         config.convert_subtitles = config_dict.get("convert_subtitles", config.convert_subtitles)
         config.skip_bitmap_subtitles = config_dict.get("skip_bitmap_subtitles", config.skip_bitmap_subtitles)
-        
+
         if profiles:
             config.bitrate_profiles = profiles
-        
+
         return config

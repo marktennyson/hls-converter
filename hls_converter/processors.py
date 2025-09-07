@@ -10,7 +10,7 @@ import subprocess
 import time
 import multiprocessing as mp
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from collections import defaultdict
 
 from rich.console import Console
@@ -25,7 +25,7 @@ console = Console()
 
 class BaseProcessor:
     """Base class for media processors."""
-    
+
     def __init__(self, encoder_detector: EncoderDetector, config: HLSConfig):
         self.encoder_detector = encoder_detector
         self.config = config
@@ -35,10 +35,28 @@ class BaseProcessor:
 
 class VideoProcessor(BaseProcessor):
     """Processes video streams for HLS output."""
+
+    def process_all_video_renditions(self, profiles: List[BitrateProfile], input_file: Path, output_dir: Path, total_duration: float, progress=None) -> List[Dict[str, Any]]:
+        """
+        Process all video renditions in parallel using multiprocessing.Pool.
+        """
+        from functools import partial
+        with mp.Pool(processes=self.optimal_workers) as pool:
+            func = partial(self.process_video_rendition, input_file=input_file, output_dir=output_dir, total_duration=total_duration, progress=progress)
+            results = pool.map(func, profiles)
+        return results
     
-    def process_video_rendition(self, profile: BitrateProfile, input_file: Path, 
-                              output_dir: Path, total_duration: float,
-                              progress=None, task_id=None) -> Dict[str, Any]:
+    def process_video_rendition(
+        self,
+        profile: BitrateProfile,
+        input_file: Path,
+        output_dir: Path,
+        total_duration: float,
+        progress=None,
+        task_id=None,
+        *,
+        encoder_threads: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """
         Process a single video rendition.
         
@@ -54,47 +72,97 @@ class VideoProcessor(BaseProcessor):
         folder = output_dir / profile.name
         folder.mkdir(parents=True, exist_ok=True)
         
-        # Get best video encoder
+        # Get best video encoder; override to software if requested
         video_encoder, _ = self.encoder_detector.get_best_video_encoder()
+        if self.config.force_software_encoding and video_encoder != "libx264":
+            video_encoder = "libx264"
         
+        # Determine encoder threads: use passed override, else config, else derive from CPU and desired concurrency
+        per_proc_threads = (
+            encoder_threads
+            if encoder_threads is not None
+            else (self.config.encoder_threads or max(1, self.cpu_count // max(1, self.optimal_workers)))
+        )
+
         # Build FFmpeg command
-        cmd = [
-            "ffmpeg", "-y",
-            "-hide_banner", "-nostats", "-loglevel", "error",
-            "-hwaccel", "auto",
-            "-i", str(input_file),
-            "-vf", f"scale={profile.scale_filter}",
-            "-c:v", video_encoder,
+        cmd: List[str] = [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-nostats",
+            "-loglevel",
+            "error",
         ]
+
+        # Hardware acceleration control for decode
+        if not self.config.disable_hwaccel:
+            cmd.extend(["-hwaccel", "auto"])
+
+        # Help filters scale across cores and allow decoder to parallelize
+        cmd.extend([
+            "-i",
+            str(input_file),
+            "-filter_threads", str(max(1, min(8, per_proc_threads))),
+            "-vf",
+            f"scale={profile.scale_filter}",
+            "-c:v",
+            video_encoder,
+        ])
         
         # Add encoder-specific options
         encoder_args = self.config.get_encoder_specific_args(video_encoder)
         cmd.extend(encoder_args)
-        
-        # Add bitrate and quality settings
+
+        # For libx264, force higher thread usage including lookahead and slice threads to better utilize CPU on small frames
+        if video_encoder == "libx264":
+            lookahead_threads = max(1, min(4, per_proc_threads))
+            x264_params = f"threads={per_proc_threads}:lookahead-threads={lookahead_threads}:sliced-threads=1"
+            cmd.extend(["-x264-params", x264_params])
+
         cmd.extend([
-            "-b:v", f"{profile.max_bitrate_kbps}k",
-            "-maxrate", f"{int(profile.max_bitrate_kbps * 1.2)}k",
-            "-bufsize", f"{int(profile.max_bitrate_kbps * 2)}k",
-            "-g", str(self.config.gop_size),
-            "-keyint_min", str(self.config.gop_size),
-            "-sc_threshold", "0",
-            "-threads", str(max(2, min(self.cpu_count, 16))),
-            "-an", "-sn",  # No audio/subtitles in video renditions
-            "-hls_time", str(self.config.segment_duration),
-            "-hls_playlist_type", self.config.playlist_type,
-            "-hls_flags", "independent_segments+temp_file",
-            "-hls_segment_filename", str(folder / "chunk_%03d.ts"),
-            "-progress", "pipe:2",
-            str(folder / "playlist.m3u8")
+            "-b:v",
+            f"{profile.max_bitrate_kbps}k",
+            "-maxrate",
+            f"{int(profile.max_bitrate_kbps * 1.2)}k",
+            "-bufsize",
+            f"{int(profile.max_bitrate_kbps * 2)}k",
+            "-g",
+            str(self.config.gop_size),
+            "-keyint_min",
+            str(self.config.gop_size),
+            "-sc_threshold",
+            "0",
+            "-threads",
+            str(per_proc_threads),
+            "-an",
+            "-sn",  # No audio/subtitles in video renditions
+            "-hls_time",
+            str(self.config.segment_duration),
+            "-hls_playlist_type",
+            self.config.playlist_type,
+            "-hls_flags",
+            "independent_segments+temp_file",
+            "-hls_segment_filename",
+            str(folder / "chunk_%03d.ts"),
+            "-progress",
+            "pipe:2",
+            str(folder / "playlist.m3u8"),
         ])
         
         return self._run_ffmpeg_process(
             cmd, profile.name, "video", total_duration, progress=progress, task_id=task_id
         )
     
-    def _run_ffmpeg_process(self, cmd: List[str], name: str, process_type: str, 
-                          total_duration: float, *, progress=None, task_id=None) -> Dict[str, Any]:
+    def _run_ffmpeg_process(
+        self,
+        cmd: List[str],
+        name: str,
+        process_type: str,
+        total_duration: float,
+        *,
+        progress=None,
+        task_id=None,
+    ) -> Dict[str, Any]:
         """Run FFmpeg process with enhanced progress monitoring and in-place Rich updates."""
         start_time = time.time()
         process = None
@@ -273,10 +341,28 @@ class VideoProcessor(BaseProcessor):
 
 class AudioProcessor(BaseProcessor):
     """Processes audio streams for HLS output."""
+
+    def process_all_audio_renditions(self, tracks: List[AudioTrack], input_file: Path, output_dir: Path, total_duration: float, progress=None) -> List[Dict[str, Any]]:
+        """
+        Process all audio renditions in parallel using multiprocessing.Pool.
+        """
+        from functools import partial
+        with mp.Pool(processes=self.optimal_workers) as pool:
+            func = partial(self.process_audio_rendition, input_file=input_file, output_dir=output_dir, total_duration=total_duration, progress=progress)
+            results = pool.map(func, tracks)
+        return results
     
-    def process_audio_rendition(self, track: AudioTrack, input_file: Path, 
-                              output_dir: Path, total_duration: float,
-                              progress=None, task_id=None) -> Dict[str, Any]:
+    def process_audio_rendition(
+        self,
+        track: AudioTrack,
+        input_file: Path,
+        output_dir: Path,
+        total_duration: float,
+        progress=None,
+        task_id=None,
+        *,
+        encoder_threads: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """
         Process a single audio rendition.
         
@@ -293,8 +379,10 @@ class AudioProcessor(BaseProcessor):
         folder = output_dir / f"audio_{lang}"
         folder.mkdir(parents=True, exist_ok=True)
         
-        # Get best audio encoder
+        # Get best audio encoder; override to software if requested
         audio_encoder, _ = self.encoder_detector.get_best_audio_encoder()
+        if self.config.force_software_encoding and audio_encoder not in ("aac", "libfdk_aac"):
+            audio_encoder = "aac"
         
         # Determine optimal audio bitrate based on input
         audio_bitrate = "160k"  # Default
@@ -302,27 +390,58 @@ class AudioProcessor(BaseProcessor):
             # Use input bitrate but cap it reasonably for streaming
             optimal_bitrate = min(track.bitrate, 320)
             audio_bitrate = f"{optimal_bitrate}k"
-        
+
         # Build FFmpeg command
-        cmd = [
-            "ffmpeg", "-y",
-            "-hide_banner", "-nostats", "-loglevel", "error",
-            "-hwaccel", "auto",
-            "-i", str(input_file),
-            "-map", f"0:a:{track.map_index}",
-            "-c:a", audio_encoder,
-            "-b:a", audio_bitrate,
-            "-ar", "48000",  # Standard sample rate for HLS
-            "-threads", str(max(2, min(self.cpu_count, 16))),
-            "-vn", "-sn",  # No video/subtitles
-            "-hls_time", str(self.config.segment_duration),
-            "-hls_playlist_type", self.config.playlist_type,
-            "-hls_flags", "independent_segments+temp_file",
-            "-hls_segment_filename", str(folder / "chunk_%03d.ts"),
-            "-progress", "pipe:2",
-            str(folder / "playlist.m3u8")
+        cmd: List[str] = [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-nostats",
+            "-loglevel",
+            "error",
         ]
-        
+
+        if not self.config.disable_hwaccel:
+            cmd.extend(["-hwaccel", "auto"])
+
+        cmd.extend([
+            "-i",
+            str(input_file),
+            "-map",
+            f"0:a:{track.map_index}",
+            "-c:a",
+            audio_encoder,
+            "-b:a",
+            audio_bitrate,
+            "-ar",
+            "48000",  # Standard sample rate for HLS
+        ])
+
+        # Threads for audio encode
+        per_proc_threads = (
+            encoder_threads
+            if encoder_threads is not None
+            else (self.config.encoder_threads or max(1, self.cpu_count // max(1, self.optimal_workers)))
+        )
+
+        cmd.extend([
+            "-threads",
+            str(per_proc_threads),
+            "-vn",
+            "-sn",  # No video/subtitles
+            "-hls_time",
+            str(self.config.segment_duration),
+            "-hls_playlist_type",
+            self.config.playlist_type,
+            "-hls_flags",
+            "independent_segments+temp_file",
+            "-hls_segment_filename",
+            str(folder / "chunk_%03d.ts"),
+            "-progress",
+            "pipe:2",
+            str(folder / "playlist.m3u8"),
+        ])
+
         # Reuse video processor's FFmpeg runner
         video_processor = VideoProcessor(self.encoder_detector, self.config)
         return video_processor._run_ffmpeg_process(

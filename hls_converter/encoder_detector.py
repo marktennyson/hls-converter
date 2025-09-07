@@ -127,29 +127,29 @@ class EncoderDetector:
         audio_encoder = None  
         audio_name = "Unknown"
         
-        # Select video encoder (prefer hardware)
-        if encoders['video']['hardware']:
-            video_encoder = encoders['video']['hardware'][0][0]
-            video_name = encoders['video']['hardware'][0][1]
-            console.print(f"[bold green]🚀 Selected video encoder: {video_name}[/bold green]")
-        elif encoders['video']['software']:
+        # Select video encoder (prefer software for better CPU utilization by default)
+        if encoders['video']['software']:
             video_encoder = encoders['video']['software'][0][0]
             video_name = encoders['video']['software'][0][1]
-            console.print(f"[yellow]⚡ Selected video encoder: {video_name} (software fallback)[/yellow]")
+            console.print(f"[bold green]🚀 Selected video encoder: {video_name} (software)[/bold green]")
+        elif encoders['video']['hardware']:
+            video_encoder = encoders['video']['hardware'][0][0]
+            video_name = encoders['video']['hardware'][0][1]
+            console.print(f"[yellow]⚡ Selected video encoder: {video_name} (hardware)\n    Tip: use --force-software to keep encoding on CPU for max utilization[/yellow]")
         else:
             video_encoder = 'libx264'
             video_name = 'x264 Software (fallback)'
             console.print(f"[red]⚠️  No encoders detected, using fallback: {video_name}[/red]")
         
-        # Select audio encoder (prefer hardware)
-        if encoders['audio']['hardware']:
-            audio_encoder = encoders['audio']['hardware'][0][0]
-            audio_name = encoders['audio']['hardware'][0][1]
-            console.print(f"[bold green]🎵 Selected audio encoder: {audio_name}[/bold green]")
-        elif encoders['audio']['software']:
+        # Select audio encoder (prefer software by default)
+        if encoders['audio']['software']:
             audio_encoder = encoders['audio']['software'][0][0]
             audio_name = encoders['audio']['software'][0][1]
-            console.print(f"[yellow]🎵 Selected audio encoder: {audio_name} (software fallback)[/yellow]")
+            console.print(f"[bold green]🎵 Selected audio encoder: {audio_name} (software)[/bold green]")
+        elif encoders['audio']['hardware']:
+            audio_encoder = encoders['audio']['hardware'][0][0]
+            audio_name = encoders['audio']['hardware'][0][1]
+            console.print(f"[yellow]🎵 Selected audio encoder: {audio_name} (hardware)[/yellow]")
         else:
             audio_encoder = 'aac'
             audio_name = 'Generic AAC (fallback)'
@@ -167,12 +167,14 @@ class EncoderDetector:
         """Get the best available video encoder."""
         if not self._cache:
             self.detect_encoders()
+        assert self._cache is not None
         return self._cache['video_encoder'], self._cache['video_name']
     
     def get_best_audio_encoder(self) -> Tuple[str, str]:
         """Get the best available audio encoder."""
         if not self._cache:
             self.detect_encoders()
+        assert self._cache is not None
         return self._cache['audio_encoder'], self._cache['audio_name']
     
     def is_hardware_encoder(self, encoder: str) -> bool:
@@ -187,4 +189,5 @@ class EncoderDetector:
         """Get detailed information about detected encoders."""
         if not self._cache:
             self.detect_encoders()
+        assert self._cache is not None
         return self._cache

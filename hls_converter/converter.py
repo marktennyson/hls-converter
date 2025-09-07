@@ -174,10 +174,10 @@ class HLSConverter:
             # Step 4: Process media streams
             step_start = time.time()
             console.print("[bold blue]Step 4/5: Processing video, audio, and subtitle streams[/bold blue]")
-            
+
             # Process all streams in parallel
             self._process_streams(input_path, output_path, media_info)
-            
+
             step_timings["Stream Processing"] = time.time() - step_start
             overall_progress.advance(overall_task)
             
@@ -243,21 +243,21 @@ class HLSConverter:
     
     def _process_streams(self, input_path: Path, output_path: Path, media_info: MediaInfo):
         """Process all media streams in parallel."""
-        tasks = []
-        
-        # Prepare video tasks
+        # Prepare tasks
         video_tasks = [
             (profile, input_path, output_path, media_info.video.duration if media_info.video else 0.0)
             for profile in self.config.bitrate_profiles
         ]
-        
-        # Prepare audio tasks
         audio_tasks = [
             (track, input_path, output_path, media_info.video.duration if media_info.video else 0.0)
             for track in media_info.audio_tracks
         ]
-        
+
         total_tasks = len(video_tasks) + len(audio_tasks)
+
+        # Calculate threads per encode to saturate CPU across concurrent encodes
+        concurrent_encodes = max(1, min(self.optimal_workers, total_tasks))
+        threads_per_encode = max(1, self.cpu_count // concurrent_encodes)
         completed_tasks = 0
 
         # Unified progress for renditions with extra columns for fps and speed using task fields
@@ -277,7 +277,7 @@ class HLSConverter:
             TimeRemainingColumn(),
             StatsColumn(),
             console=console,
-            transient=False
+            transient=False,
         ) as progress:
             main_task = progress.add_task("[cyan]Processing all renditions...", total=total_tasks)
 
@@ -285,7 +285,6 @@ class HLSConverter:
             if video_tasks:
                 console.print(f"[bold blue]🎬 Processing {len(video_tasks)} video renditions...[/bold blue]")
                 with ThreadPoolExecutor(max_workers=self.optimal_workers) as executor:
-                    # Create a per-rendition task row to update in-place
                     task_rows = {}
                     futures = []
                     for profile, in_path, out_path, duration in video_tasks:
@@ -309,8 +308,13 @@ class HLSConverter:
                         futures.append(
                             executor.submit(
                                 self.video_processor.process_video_rendition,
-                                profile, in_path, out_path, duration,
-                                progress, row_id
+                                profile,
+                                in_path,
+                                out_path,
+                                duration,
+                                progress,
+                                row_id,
+                                encoder_threads=self.config.encoder_threads or threads_per_encode,
                             )
                         )
                     future_to_task = {fut: None for fut in futures}
@@ -320,24 +324,17 @@ class HLSConverter:
                         completed_tasks += 1
 
                         if result["status"] == "success":
-                            # Build comprehensive completion message
                             details = [f"{result['duration']:.1f}s"]
-
                             if result.get('speed'):
                                 details.append(f"speed: {result['speed']}")
-
                             if result.get('avg_fps', 0) > 0:
                                 details.append(f"avg: {result['avg_fps']:.1f}fps")
-
                             if result.get('frames_processed', 0) > 0:
                                 details.append(f"{result['frames_processed']} frames")
-
                             if result.get('final_bitrate') and result['final_bitrate'] != "0kbits/s":
                                 details.append(f"bitrate: {result['final_bitrate']}")
-
                             if result.get('target_resolution') and result['target_resolution'] != "Unknown":
                                 details.append(f"res: {result['target_resolution']}")
-
                             details_str = f" ({', '.join(details)})" if details else ""
                             console.print(f"[green]✅ Video {result['name']} completed{details_str}[/green]")
                         else:
@@ -372,8 +369,13 @@ class HLSConverter:
                         futures.append(
                             executor.submit(
                                 self.audio_processor.process_audio_rendition,
-                                track, in_path, out_path, duration,
-                                progress, row_id
+                                track,
+                                in_path,
+                                out_path,
+                                duration,
+                                progress,
+                                row_id,
+                                encoder_threads=self.config.encoder_threads or threads_per_encode,
                             )
                         )
                     future_to_task = {fut: None for fut in futures}
@@ -383,30 +385,25 @@ class HLSConverter:
                         completed_tasks += 1
 
                         if result["status"] == "success":
-                            # Build comprehensive completion message for audio
                             details = [f"{result['duration']:.1f}s"]
-
                             if result.get('speed'):
                                 details.append(f"speed: {result['speed']}")
-
                             if result.get('final_bitrate') and result['final_bitrate'] != "0kbits/s":
                                 details.append(f"bitrate: {result['final_bitrate']}")
-
                             if result.get('output_size') and result['output_size'] != "0kB":
                                 details.append(f"size: {result['output_size']}")
-
                             details_str = f" ({', '.join(details)})" if details else ""
                             console.print(f"[green]✅ Audio {result['name']} completed{details_str}[/green]")
                         else:
                             console.print(f"[red]❌ Audio {result['name']} failed: {result['error']}[/red]")
 
                         progress.advance(main_task)
-        
+
         # Process subtitles (if enabled)
         if self.config.convert_subtitles and media_info.subtitle_tracks:
             console.print("[bold blue]💬 Converting subtitles to WebVTT...[/bold blue]")
             self.subtitle_processor.convert_subtitles(input_path, output_path, media_info.subtitle_tracks)
-        
+
         console.print("[bold green]🎉 All stream processing completed![/bold green]")
     
     def _create_master_playlist(self, output_dir: Path, audio_tracks: List) -> Path:
